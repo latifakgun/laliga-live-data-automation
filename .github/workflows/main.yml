@@ -1,17 +1,16 @@
-name: Haftalik La Liga Guncellemesi
+name: Debug La Liga Update
 
 on:
   schedule:
-    # Her Sali gunu saat 10:00 UTC'de calis (Turkiye saatiyle 13:00)
     - cron: '0 18 * * 2'
-  workflow_dispatch: # Manuel test etmek icin buton ekler
+  workflow_dispatch:
 
 jobs:
-  update-data:
+  debug-update:
     runs-on: ubuntu-latest
     
     steps:
-      - name: Depoyu Cek (Checkout)
+      - name: Kodlari Cek
         uses: actions/checkout@v3
 
       - name: Python Kur
@@ -22,6 +21,9 @@ jobs:
       - name: Kutuphaneleri Yukle
         run: |
           pip install -r requirements.txt
+
+      - name: Dosyalari Kontrol Et (Ls Komutu)
+        run: ls -la # Bu adim dosyalarin orada olup olmadigini gosterir
 
       - name: Scripti Calistir
         env:
