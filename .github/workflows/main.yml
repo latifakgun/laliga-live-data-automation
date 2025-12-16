@@ -1,16 +1,17 @@
-name: Debug La Liga Update
+name: FBref La Liga Scraper
 
 on:
   schedule:
+    # Her Salı 10:00
     - cron: '0 18 * * 2'
   workflow_dispatch:
 
 jobs:
-  debug-update:
+  scrape-and-upload:
     runs-on: ubuntu-latest
     
     steps:
-      - name: Kodlari Cek
+      - name: Kodları Çek
         uses: actions/checkout@v3
 
       - name: Python Kur
@@ -18,16 +19,12 @@ jobs:
         with:
           python-version: '3.9'
 
-      - name: Kutuphaneleri Yukle
-        run: |
-          pip install -r requirements.txt
+      - name: Kütüphaneleri Yükle
+        run: pip install -r requirements.txt
 
-      - name: Dosyalari Kontrol Et (Ls Komutu)
-        run: ls -la # Bu adim dosyalarin orada olup olmadigini gosterir
-
-      - name: Scripti Calistir
+      - name: Çalıştır
         env:
-          FOOTBALL_API_KEY: ${{ secrets.FOOTBALL_API_KEY }}
+          # Sadece Kaggle şifreleri yeterli
           KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
           KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
         run: python main.py
