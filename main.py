@@ -1,66 +1,64 @@
 import pandas as pd
 import requests
-from io import StringIO
-import time
+import io
 import os
 import sys
 from kaggle.api.kaggle_api_extended import KaggleApi
 
-def scrape_fbref_laliga():
-    print("--- FBref Sitesinden Veri Çekiliyor ---")
+def download_football_data():
+    print("--- Football-Data.co.uk Kaynağına Bağlanılıyor ---")
     
-    # La Liga 2025-2026 Fikstür Sayfası URL'i
-    # (Sezon değiştikçe buradaki yılı değiştirmek yeterli olur)
-    url = "https://fbref.com/en/comps/12/schedule/La-Liga-Scores-and-Fixtures"
+    # URL Mantığı: 
+    # mmz4281 = Klasör
+    # 2526 = 2025-2026 Sezonu
+    # SP1 = Spain 1 (La Liga)
+    # Eğer bu kod seneye çalışırsa '2627' yapmak gerekir.
+    url = "https://www.football-data.co.uk/mmz4281/2526/SP1.csv"
     
-    # Kendimizi tarayıcı gibi tanıtıyoruz (Yoksa site bizi engeller)
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
     }
 
     try:
         response = requests.get(url, headers=headers)
-        response.raise_for_status() # Hata varsa durdur
         
-        # HTML içindeki tabloları oku
-        # match="Scores & Fixtures" diyerek doğru tabloyu hedefliyoruz
-        dfs = pd.read_html(StringIO(response.text), match="Scores & Fixtures")
-        
-        if not dfs:
-            print("HATA: Tablo bulunamadı.")
-            return []
+        # Eğer dosya henüz yoksa (Sezon başı vs.) 404 dönebilir
+        if response.status_code == 404:
+            print("HATA: Bu sezonun dosyası henüz sitede oluşturulmamış veya URL yanlış.")
+            sys.exit(1)
             
-        df = dfs[0]
+        response.raise_for_status()
+        
+        # Gelen veri doğrudan CSV formatında
+        print("Veri indirildi, işleniyor...")
+        csv_data = io.StringIO(response.content.decode('utf-8', errors='ignore'))
+        
+        df = pd.read_csv(csv_data)
         
         # --- VERİ TEMİZLEME ---
-        # 1. Sadece oynanmış maçları al (Skoru belli olanlar)
-        # 'Score' sütunu boş olmayanları seçiyoruz
-        df_filtered = df[df['Score'].notna()].copy()
+        # Boş satırları temizle
+        df = df.dropna(how='all')
         
-        # 2. Gereksiz sütunları at (Varsa)
-        # Genelde 'Match Report' ve 'Notes' gibi boş sütunlar gelir
-        cols_to_keep = ['Wk', 'Day', 'Date', 'Time', 'Home', 'Score', 'Away', 'Attendance', 'Venue', 'Referee']
-        # Sadece mevcut olan sütunları seçelim (Hata almamak için)
-        available_cols = [c for c in cols_to_keep if c in df_filtered.columns]
-        df_final = df_filtered[available_cols]
-        
-        # 3. Skoru ayır (İsteğe bağlı - Daha temiz analiz için)
-        # Score "2–1" şeklindedir. Bunu Home_Goal: 2, Away_Goal: 1 diye bölelim
-        try:
-            df_final[['Home_Goals', 'Away_Goals']] = df_final['Score'].str.split('–', expand=True)
-        except:
-            pass # Ayıramazsa sorun yok, Score sütunu kalsın
+        # Tarih formatını düzeltelim (Site genelde dd/mm/yyyy verir)
+        if 'Date' in df.columns:
+            df['Date'] = pd.to_datetime(df['Date'], dayfirst=True, errors='coerce')
+            df = df.sort_values(by='Date')
 
-        print(f"Başarılı! Toplam {len(df_final)} oynanmış maç çekildi.")
-        return df_final
+        print(f"Başarılı! Toplam {len(df)} maç verisi çekildi.")
+        
+        # Örnek veri göster (Loglarda görmek için)
+        print("Son 2 Maç:")
+        print(df[['Date', 'HomeTeam', 'AwayTeam', 'FTHG', 'FTAG']].tail(2))
+        
+        return df
 
     except Exception as e:
-        print(f"Scraping Hatası: {e}")
+        print(f"İndirme Hatası: {e}")
         sys.exit(1)
 
 def save_and_upload(df):
     if df is None or len(df) == 0:
-        print("Veri yok, işlem iptal.")
+        print("Veri boş, Kaggle işlemi iptal.")
         return
 
     print("--- CSV Kaydediliyor ---")
@@ -68,9 +66,10 @@ def save_and_upload(df):
     df.to_csv(filename, index=False)
     print(f"Dosya oluşturuldu: {filename}")
 
-    print("--- Kaggle Yüklemesi ---")
+    print("--- Kaggle Yüklemesi Başlıyor ---")
+    
     if not os.path.exists("dataset-metadata.json"):
-        print("HATA: Metadata dosyası yok!")
+        print("HATA: dataset-metadata.json dosyası eksik!")
         sys.exit(1)
 
     try:
@@ -79,17 +78,14 @@ def save_and_upload(df):
         
         api.dataset_create_version(
             folder=".",
-            version_notes=f"Weekly Update (FBref): {pd.Timestamp.now().strftime('%Y-%m-%d')}",
+            version_notes=f"Auto Update (Football-Data): {pd.Timestamp.now().strftime('%Y-%m-%d')}",
             dir_mode='zip'
         )
-        print("--- BAŞARILI: Kaggle Güncellendi! ---")
+        print("--- BAŞARILI: Kaggle Dataset Güncellendi! ---")
     except Exception as e:
-        print(f"Kaggle Hatası: {e}")
+        print(f"Kaggle Yükleme Hatası: {e}")
         sys.exit(1)
 
 if __name__ == "__main__":
-    # 1. Veriyi Çek
-    data_frame = scrape_fbref_laliga()
-    
-    # 2. Kaydet ve Yükle
-    save_and_upload(data_frame)
+    df = download_football_data()
+    save_and_upload(df)
