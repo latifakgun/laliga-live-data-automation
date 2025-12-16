@@ -1,0 +1,31 @@
+name: Haftalik La Liga Guncellemesi
+
+on:
+  schedule:
+    # Her Sali gunu saat 10:00 UTC'de calis (Turkiye saatiyle 13:00)
+    - cron: '0 18 * * 2'
+  workflow_dispatch: # Manuel test etmek icin buton ekler
+
+jobs:
+  update-data:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Depoyu Cek (Checkout)
+        uses: actions/checkout@v3
+
+      - name: Python Kur
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Kutuphaneleri Yukle
+        run: |
+          pip install -r requirements.txt
+
+      - name: Scripti Calistir
+        env:
+          FOOTBALL_API_KEY: ${{ secrets.FOOTBALL_API_KEY }}
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
+        run: python main.py
